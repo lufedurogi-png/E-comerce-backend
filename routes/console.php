@@ -28,5 +28,5 @@ Artisan::command('cva:sync', function () {
     return 0;
 })->purpose('Sincronizar catálogo de productos CVA a la base de datos');
 
-// Sincronizar catálogo CVA cada 5 minutos (la API de CVA pide token nuevo cada 12h; el token se renueva automáticamente al expirar)
+// CVA sync cada 5 min (token se renueva solo)
 Schedule::command('cva:sync')->everyFiveMinutes();

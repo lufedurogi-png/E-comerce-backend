@@ -258,7 +258,7 @@ class BusquedaService
         }
 
         $limite = (int) config('busqueda.limite_resultados', 50);
-        $ids = $query->select('id')->limit($limite * 2)->pluck('id'); // fetch more to sort in memory if needed
+        $ids = $query->select('id')->limit($limite * 2)->pluck('id'); // de sobra por si ordenamos por relevancia
 
         if ($ids->isEmpty()) {
             return collect();

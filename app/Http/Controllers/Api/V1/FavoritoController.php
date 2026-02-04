@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Cache;
 
 class FavoritoController extends Controller
 {
-    /** Misma clave y TTL que CarritoController/ProductoController para reutilizar caché por producto. */
+    /** Mismo caché que Carrito/Producto por clave. */
     private const PRODUCTO_CACHE_TTL = 120;
     private const PRODUCTO_SELECT = [
         'id', 'clave', 'codigo_fabricante', 'descripcion', 'grupo', 'marca',
@@ -42,7 +42,7 @@ class FavoritoController extends Controller
         ];
     }
 
-    /** Devuelve array de productos por clave (desde caché o BD, una consulta para los que falten). */
+    /** Productos por clave (caché o BD en una consulta). */
     private function getProductosByClaves(array $claves): array
     {
         $byClave = [];
@@ -70,9 +70,7 @@ class FavoritoController extends Controller
         return array_values(array_filter(array_map(fn ($c) => $byClave[$c] ?? null, $claves)));
     }
 
-    /**
-     * Listar favoritos con datos de producto (imagen, precio, stock). Una sola petición.
-     */
+    /** Favoritos con imagen, precio y stock (una petición). */
     public function index(Request $request): JsonResponse
     {
         try {
@@ -92,9 +90,7 @@ class FavoritoController extends Controller
         }
     }
 
-    /**
-     * Agregar producto a favoritos por clave.
-     */
+    /** Agregar favorito por clave. */
     public function store(Request $request): JsonResponse
     {
         try {
@@ -126,9 +122,7 @@ class FavoritoController extends Controller
         }
     }
 
-    /**
-     * Quitar producto de favoritos por clave.
-     */
+    /** Quitar favorito por clave. */
     public function destroy(string $clave): JsonResponse
     {
         try {

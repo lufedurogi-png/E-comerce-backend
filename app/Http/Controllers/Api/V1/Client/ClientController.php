@@ -15,19 +15,19 @@ class ClientController extends Controller
 
     public function registerClientByAuthUser(RequestClientData $request){
         $result = $this->clientService->create($request);
-        $status = $result->success ? 201 : 409; // 409 Conflict if already exists
+        $status = $result->success ? 201 : 409;
         return response()->json($result, $status);
     }
 
     public function update(RequestClientData $request){
         $result = $this->clientService->update($request);
-        $status = $result->success ? 200 : 404; // 404 Not Found if no client
+        $status = $result->success ? 200 : 404;
         return response()->json($result, $status);
     }   
 
     public function getClientAuth(Request $request){
         $result = $this->clientService->getClientAuthUser();
-        $status = ($result->success && $result->data) ? 200 : 404; // 404 if no data
+        $status = ($result->success && $result->data) ? 200 : 404;
         return response()->json($result, $status);
     }
 }

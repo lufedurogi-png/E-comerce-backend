@@ -16,13 +16,9 @@ class UserService
         return UserData::fromModel($user);
     }
 
-    /**
-     * Crear usuario con tipo específico
-     */
+    /** Crear usuario; tipo del DTO o CUSTOMER por defecto. */
     public function create( RegisterUserData|UserCustomData $data, ?UserType $type = null): User
     {
-        // Si es UserCustomData, usa su tipo
-        // Si es RegisterUserData, usa el tipo pasado o CUSTOMER por defecto
         $userType = $data instanceof UserCustomData 
             ? $data->type 
             : ($type ?? UserType::CUSTOMER);

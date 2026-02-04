@@ -17,7 +17,7 @@ class CarritoController extends Controller
 {
     private const CART_INDEX_CACHE_TTL = 15;
 
-    /** Misma clave y TTL que ProductoController para reutilizar caché por producto. */
+    /** Mismo TTL/clave que ProductoController (caché compartido). */
     private const PRODUCTO_CACHE_TTL = 120;
     private const PRODUCTO_SELECT = [
         'id', 'clave', 'codigo_fabricante', 'descripcion', 'grupo', 'marca',
@@ -34,7 +34,7 @@ class CarritoController extends Controller
         return 'producto_por_clave_'.md5($clave).'_'.$clave;
     }
 
-    /** Formato producto para listado (misma estructura que ProductoController para compartir caché). */
+    /** Misma estructura que ProductoController para reusar caché. */
     private static function formatProductoForList(ProductoCva $p): array
     {
         return [
@@ -54,9 +54,7 @@ class CarritoController extends Controller
         ];
     }
 
-    /**
-     * Listar items del carrito con imagen y stock incluidos. Una sola petición; una sola consulta BD si hay caché.
-     */
+    /** Items del carrito con imagen y stock (una petición, usa caché). */
     public function index(Request $request): JsonResponse
     {
         $user = Auth::user();
@@ -123,9 +121,7 @@ class CarritoController extends Controller
         return response()->json($response);
     }
 
-    /**
-     * Agregar o actualizar cantidad en el carrito (clave, cantidad).
-     */
+    /** Agregar o actualizar item (clave, cantidad). */
     public function store(Request $request): JsonResponse
     {
         $valid = $request->validate([
@@ -166,7 +162,7 @@ class CarritoController extends Controller
         return $this->index($request);
     }
 
-    /** Respuesta rápida del carrito sin cargar datos de producto (solo tabla carrito_items). */
+    /** Carrito solo con items (sin datos de producto). */
     private function cartResponseSimple($user): array
     {
         $items = $user->carritoItems()->orderBy('updated_at', 'desc')->get();
@@ -188,9 +184,7 @@ class CarritoController extends Controller
         ];
     }
 
-    /**
-     * Quitar un item del carrito. Respuesta rápida (solo BD carrito); el front une imagen/stock del estado anterior.
-     */
+    /** Quitar item; respuesta solo con items (front mantiene imagen/stock en memoria). */
     public function destroy(string $clave): JsonResponse
     {
         $user = Auth::user();
@@ -200,10 +194,7 @@ class CarritoController extends Controller
         return response()->json($this->cartResponseSimple($user));
     }
 
-    /**
-     * Crear pedido desde el carrito y vaciarlo (checkout).
-     * Body: metodo_pago (ej. Efectivo, Transferencia).
-     */
+    /** Checkout: crea pedido y vacía carrito. Body: metodo_pago. */
     public function checkout(Request $request): JsonResponse
     {
         $valid = $request->validate([

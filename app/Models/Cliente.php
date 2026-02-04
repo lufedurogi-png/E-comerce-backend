@@ -6,7 +6,6 @@ use Illuminate\Database\Eloquent\Model;
 
 class Cliente extends Model
 {
-    //datos masivos
     protected $fillable = [
         'nombre',
         'apellidos',
@@ -30,8 +29,8 @@ class Cliente extends Model
         'deleted_at' => 'datetime',
     ];
 
-    //relacion con el modelo User
-    public function user(){
+    public function user()
+    {
         return $this->belongsTo(User::class);
     }
 
