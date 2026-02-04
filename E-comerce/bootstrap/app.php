@@ -14,12 +14,8 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        // Habilitar statefulApi para rutas SPA que usan cookies
         $middleware->statefulApi();
-        
-        // Excluir todas las rutas API del CSRF (excepto las rutas SPA que usan cookies)
-        // Las rutas API que usan tokens Bearer no necesitan CSRF
-        // Las rutas SPA bajo /api/v1/spa/* seguirán usando CSRF por statefulApi
+        // API con token sin CSRF; SPA con cookies sí usa CSRF
         $middleware->validateCsrfTokens(except: [
             'api/v1/auth/*',
             'api/v1/user/*',

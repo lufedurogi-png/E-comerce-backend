@@ -20,9 +20,8 @@ class AuthController extends Controller
     )
     {}
 
-    //metodo para registrar usuario cliente
-    public function register(RegisterUserData $request){
-
+    public function register(RegisterUserData $request)
+    {
         $authResponse = $this->authService->register($request, UserType::CUSTOMER);
 
         return response()->json($authResponse, 201);

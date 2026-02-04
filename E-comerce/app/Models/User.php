@@ -52,9 +52,9 @@ class User extends Authenticatable
         ];
     }
 
-    //relacion con el modelo Cliente
-    public function cliente(){
-        return $this->hasOne(Cliente::class); //el usuario solo puede tener un cliente relacionado
+    public function cliente()
+    {
+        return $this->hasOne(Cliente::class);
     }
 
     public function direccionesEnvio()

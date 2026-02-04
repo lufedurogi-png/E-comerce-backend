@@ -79,14 +79,12 @@ class TokenAuthService
         $updatedUser = $this->userService->update($user, $data);
 
         if(!$data->password || empty($data->password)) {
-            // No es necesario revocar tokens si no se cambió la contraseña
             return new AuthResponseData(
                 success: true,
                 user: $this->userService->getUser($updatedUser),
                 message: 'Profile updated successfully.'
             );
         }
-        // Revocar todos los tokens si se cambió la contraseña
         $user->tokens()->delete();
         $newToken = $this->createTokenForUser($updatedUser);
 
@@ -98,8 +96,6 @@ class TokenAuthService
             auth_type: 'Bearer',
         );
     }
-
-    //PRIVATE FUNCTIONS
 
     private function createTokenForUser($user): string
     {

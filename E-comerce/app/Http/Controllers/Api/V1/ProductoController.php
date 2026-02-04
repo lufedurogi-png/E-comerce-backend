@@ -17,20 +17,15 @@ class ProductoController extends Controller
         private readonly CategoriaPrincipalService $categorias
     ) {}
 
-    /**
-     * Catálogo disponible si CVA está configurado O si ya hay productos en BD (resiliente tras sincronización).
-     */
+    /** Catálogo ok si CVA configurado o si ya hay productos en BD. */
     private function catalogAvailable(): bool
     {
         return $this->cva->isConfigured() || ProductoCva::exists();
     }
 
-    /** TTL de caché para listados (segundos). */
-    private const CACHE_TTL = 90;
+    private const CACHE_TTL = 90; // segundos listados
 
-    /**
-     * Listado de productos (desde BD local, filtros por grupo, categoria_principal, marca, búsqueda).
-     */
+    /** Listado con filtros (grupo, categoria, marca, q, etc.). */
     public function index(Request $request): JsonResponse
     {
         if (! $this->catalogAvailable()) {
@@ -141,9 +136,7 @@ class ProductoController extends Controller
         ];
     }
 
-    /**
-     * Productos destacados (primeros con imagen y disponibilidad, orden reciente).
-     */
+    /** Destacados con imagen y stock, orden reciente. */
     public function destacados(Request $request): JsonResponse
     {
         if (! $this->catalogAvailable()) {
@@ -170,9 +163,7 @@ class ProductoController extends Controller
         return response()->json($data);
     }
 
-    /**
-     * Últimos productos (más recientes por synced_at).
-     */
+    /** Últimos por synced_at. */
     public function ultimos(Request $request): JsonResponse
     {
         if (! $this->catalogAvailable()) {
@@ -194,24 +185,20 @@ class ProductoController extends Controller
         return response()->json($data);
     }
 
-    /** Columnas mínimas para listado carrito/favoritos (evita ficha_tecnica, raw_data, etc.). */
+    /** Select para listado carrito/favoritos (sin ficha_tecnica ni raw). */
     private const POR_CLAVES_SELECT = [
         'id', 'clave', 'codigo_fabricante', 'descripcion', 'grupo', 'marca',
         'precio', 'moneda', 'imagen', 'imagenes', 'disponible', 'disponible_cd', 'garantia',
     ];
 
-    /** TTL caché por producto (carrito/favoritos): segunda carga casi al instante. */
-    private const POR_CLAVE_CACHE_TTL = 120;
+    private const POR_CLAVE_CACHE_TTL = 120; // por producto (carrito/favoritos)
 
     private static function productoPorClaveCacheKey(string $clave): string
     {
         return 'producto_por_clave_'.md5($clave).'_'.$clave;
     }
 
-    /**
-     * Productos por claves (carrito, favoritos). Caché por producto: la 2ª vez que se piden las mismas
-     * claves se sirven desde caché en milisegundos.
-     */
+    /** Productos por claves; caché por clave (2ª petición misma clave = cache). */
     public function porClaves(Request $request): JsonResponse
     {
         if (! $this->catalogAvailable()) {

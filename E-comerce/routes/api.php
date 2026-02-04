@@ -40,7 +40,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/catalogos/subgrupos', [ProductoController::class, 'subgrupos'])->name('catalogos.subgrupos');
         Route::get('/catalogos/marcas', [ProductoController::class, 'marcas'])->name('catalogos.marcas');
 
-        // Búsqueda tolerante a errores (registra búsqueda y productos mostrados)
+        // Búsqueda + registro de búsqueda/productos mostrados
         Route::get('/busqueda', [BusquedaController::class, 'index'])->name('busqueda.index');
         Route::post('/busqueda/seleccion', [BusquedaController::class, 'registrarSeleccion'])->name('busqueda.seleccion');
     //-------------------------------------------------------------
