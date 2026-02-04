@@ -1,0 +1,31 @@
+{
+  "remote.autoForwardPorts": false,
+  "remote.restoreForwardedPorts": false,
+  "remote.portsAttributes": {
+    "3000": {
+      "label": "Next.js",
+      "onAutoForward": "ignore",
+      "visibility": "private"
+    },
+    "8000": {
+      "label": "Laravel",
+      "onAutoForward": "ignore",
+      "visibility": "private"
+    },
+    "1-65000": {
+      "label": "Application",
+      "onAutoForward": "ignore",
+      "visibility": "private"
+    }
+  },
+  "portsAttributes": {
+    "3000": {
+      "label": "Next.js",
+      "onAutoForward": "ignore"
+    },
+    "8000": {
+      "label": "Laravel",
+      "onAutoForward": "ignore"
+    }
+  }
+}

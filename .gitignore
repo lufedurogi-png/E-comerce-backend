@@ -1,0 +1,14 @@
+# No subir el front: solo E-comerce (backend)
+E-comerce-front/
+
+# Dependencias
+node_modules/
+
+# Variables de entorno (nunca subir secretos)
+.env
+.env.*
+!.env.example
+
+# Otros
+.DS_Store
+*.log
