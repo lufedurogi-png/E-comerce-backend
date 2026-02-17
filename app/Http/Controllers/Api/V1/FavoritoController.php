@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\ProductoCva;
+use App\Models\ProductoManual;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -23,7 +24,7 @@ class FavoritoController extends Controller
         return 'producto_por_clave_'.md5($clave).'_'.$clave;
     }
 
-    private static function formatProductoForList(ProductoCva $p): array
+    private static function formatProductoForList(ProductoCva|ProductoManual $p): array
     {
         return [
             'id' => $p->id,
@@ -57,14 +58,23 @@ class FavoritoController extends Controller
             }
         }
         if (! empty($missing)) {
-            $fresh = ProductoCva::query()
-                ->select(self::PRODUCTO_SELECT)
-                ->whereIn('clave', $missing)
-                ->get();
-            foreach ($fresh as $p) {
-                $formatted = self::formatProductoForList($p);
-                $byClave[$p->clave] = $formatted;
-                Cache::put(self::productoCacheKey($p->clave), $formatted, self::PRODUCTO_CACHE_TTL);
+            $cvaClaves = array_filter($missing, fn ($c) => ! str_starts_with($c, 'MANUAL-'));
+            $manualClaves = array_filter($missing, fn ($c) => str_starts_with($c, 'MANUAL-'));
+            if (! empty($cvaClaves)) {
+                $fresh = ProductoCva::query()->select(self::PRODUCTO_SELECT)->whereIn('clave', $cvaClaves)->get();
+                foreach ($fresh as $p) {
+                    $formatted = self::formatProductoForList($p);
+                    $byClave[$p->clave] = $formatted;
+                    Cache::put(self::productoCacheKey($p->clave), $formatted, self::PRODUCTO_CACHE_TTL);
+                }
+            }
+            if (! empty($manualClaves)) {
+                $manual = ProductoManual::query()->select(self::PRODUCTO_SELECT)->whereIn('clave', $manualClaves)->where('anulado', false)->get();
+                foreach ($manual as $p) {
+                    $formatted = self::formatProductoForList($p);
+                    $byClave[$p->clave] = $formatted;
+                    Cache::put(self::productoCacheKey($p->clave), $formatted, self::PRODUCTO_CACHE_TTL);
+                }
             }
         }
         return array_values(array_filter(array_map(fn ($c) => $byClave[$c] ?? null, $claves)));

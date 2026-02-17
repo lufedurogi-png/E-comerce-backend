@@ -66,7 +66,7 @@ enum PermissionEnum: string
     {
         return match($role) {
             UserRole::ADMIN => self::values(),
-            
+
             UserRole::CUSTOMER => [
                 self::VIEW_PRODUCTS->value,
                 self::VIEW_PROFILE->value,
@@ -81,15 +81,6 @@ enum PermissionEnum: string
                 self::EDIT_PROFILE->value,
                 self::VIEW_ORDERS->value,
                 self::CREATE_ORDERS->value,
-                
-            ],
-            
-            UserRole::ADMIN => [
-                self::VIEW_PRODUCTS->value,
-                self::EDIT_PRODUCTS->value,
-                self::DELETE_PRODUCTS->value,
-                self::VIEW_DASHBOARD->value,
-                self::MANAGE_USERS->value,
             ],
         };
     }

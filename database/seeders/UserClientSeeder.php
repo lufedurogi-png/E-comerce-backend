@@ -14,20 +14,20 @@ class UserClientSeeder extends Seeder
      */
     public function run(): void
     {
-        $cliente = User::create([
-            'name' => 'Cliente Ejemplo',
-            'email' => 'cliente@example.com',
-            'password' => 'cliente@example.com',
-            'tipo' => 2,
-        ]);
-        $cliente->assignRole(UserRole::CUSTOMER->value);
+        $cliente = User::firstOrCreate(
+            ['email' => 'cliente@example.com'],
+            ['name' => 'Cliente Ejemplo', 'password' => 'cliente@example.com', 'tipo' => 2]
+        );
+        if (! $cliente->hasRole(UserRole::CUSTOMER->value)) {
+            $cliente->assignRole(UserRole::CUSTOMER->value);
+        }
 
-        $cliente2 = User::create([
-            'name' => 'Cliente Ejemplo 2',
-            'email' => 'cliente2@example.com',
-            'password' => 'cliente2@example.com',
-            'tipo' => 2,
-        ]);
-        $cliente2->assignRole(UserRole::CUSTOMER->value);
+        $cliente2 = User::firstOrCreate(
+            ['email' => 'cliente2@example.com'],
+            ['name' => 'Cliente Ejemplo 2', 'password' => 'cliente2@example.com', 'tipo' => 2]
+        );
+        if (! $cliente2->hasRole(UserRole::CUSTOMER->value)) {
+            $cliente2->assignRole(UserRole::CUSTOMER->value);
+        }
     }
 }

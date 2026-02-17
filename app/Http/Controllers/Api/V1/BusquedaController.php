@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\ProductoCva;
+use App\Models\ProductoManual;
 use App\Services\BusquedaService;
 use App\Services\CVAService;
 use Illuminate\Http\JsonResponse;
@@ -15,6 +17,13 @@ class BusquedaController extends Controller
         private readonly CVAService $cva
     ) {}
 
+    private function catalogAvailable(): bool
+    {
+        return $this->cva->isConfigured()
+            || ProductoCva::exists()
+            || ProductoManual::where('anulado', false)->exists();
+    }
+
     /**
      * Búsqueda tolerante a errores: normaliza la consulta, devuelve productos
      * priorizados por relevancia histórica y registra la búsqueda y los productos mostrados.
@@ -23,7 +32,7 @@ class BusquedaController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        if (! $this->cva->isConfigured()) {
+        if (! $this->catalogAvailable()) {
             return response()->json([
                 'success' => false,
                 'message' => 'El catálogo de productos no está disponible en este momento.',

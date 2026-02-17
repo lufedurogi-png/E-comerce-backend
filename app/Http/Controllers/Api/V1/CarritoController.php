@@ -7,6 +7,7 @@ use App\Models\CarritoItem;
 use App\Models\Pedido;
 use App\Models\PedidoItem;
 use App\Models\ProductoCva;
+use App\Models\ProductoManual;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -35,7 +36,7 @@ class CarritoController extends Controller
     }
 
     /** Misma estructura que ProductoController para reusar caché. */
-    private static function formatProductoForList(ProductoCva $p): array
+    private static function formatProductoForList(ProductoCva|ProductoManual $p): array
     {
         return [
             'id' => $p->id,
@@ -75,14 +76,23 @@ class CarritoController extends Controller
                 }
             }
             if (! empty($missing)) {
-                $fresh = ProductoCva::query()
-                    ->select(self::PRODUCTO_SELECT)
-                    ->whereIn('clave', $missing)
-                    ->get();
-                foreach ($fresh as $p) {
-                    $formatted = self::formatProductoForList($p);
-                    $byClave[$p->clave] = $formatted;
-                    Cache::put(self::productoCacheKey($p->clave), $formatted, self::PRODUCTO_CACHE_TTL);
+                $cvaClaves = array_filter($missing, fn ($c) => ! str_starts_with($c, 'MANUAL-'));
+                $manualClaves = array_filter($missing, fn ($c) => str_starts_with($c, 'MANUAL-'));
+                if (! empty($cvaClaves)) {
+                    $fresh = ProductoCva::query()->select(self::PRODUCTO_SELECT)->whereIn('clave', $cvaClaves)->get();
+                    foreach ($fresh as $p) {
+                        $formatted = self::formatProductoForList($p);
+                        $byClave[$p->clave] = $formatted;
+                        Cache::put(self::productoCacheKey($p->clave), $formatted, self::PRODUCTO_CACHE_TTL);
+                    }
+                }
+                if (! empty($manualClaves)) {
+                    $manual = ProductoManual::query()->select(self::PRODUCTO_SELECT)->whereIn('clave', $manualClaves)->where('anulado', false)->get();
+                    foreach ($manual as $p) {
+                        $formatted = self::formatProductoForList($p);
+                        $byClave[$p->clave] = $formatted;
+                        Cache::put(self::productoCacheKey($p->clave), $formatted, self::PRODUCTO_CACHE_TTL);
+                    }
                 }
             }
 
@@ -129,7 +139,12 @@ class CarritoController extends Controller
             'cantidad' => 'required|integer|min:1|max:9999',
         ]);
 
-        $producto = ProductoCva::where('clave', $valid['clave'])->first();
+        $producto = null;
+        if (str_starts_with($valid['clave'], 'MANUAL-')) {
+            $producto = ProductoManual::where('clave', $valid['clave'])->where('anulado', false)->first();
+        } else {
+            $producto = ProductoCva::where('clave', $valid['clave'])->first();
+        }
         if (! $producto) {
             return response()->json([
                 'success' => false,
