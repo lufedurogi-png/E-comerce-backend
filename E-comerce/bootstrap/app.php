@@ -18,6 +18,8 @@ return Application::configure(basePath: dirname(__DIR__))
         // API con token sin CSRF; SPA con cookies sí usa CSRF
         $middleware->validateCsrfTokens(except: [
             'api/v1/auth/*',
+            'api/v1/admin/auth/*',
+            'api/v1/admin/*',
             'api/v1/user/*',
             'api/v1/prueba-pedido',
             'api/v1/pedidos/*',
@@ -27,6 +29,8 @@ return Application::configure(basePath: dirname(__DIR__))
             'api/v1/datos-facturacion/*',
             'api/v1/carrito',
             'api/v1/carrito/*',
+            'api/v1/cotizaciones',
+            'api/v1/cotizaciones/*',
             'api/v1/favoritos',
             'api/v1/favoritos/*',
             'api/v1/tarjetas-guardadas',

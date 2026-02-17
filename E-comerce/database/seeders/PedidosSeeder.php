@@ -56,9 +56,14 @@ class PedidosSeeder extends Seeder
         foreach ($pedidos as $p) {
             $items = $p['items'];
             unset($p['items']);
-            $pedido = $user->pedidos()->create($p);
-            foreach ($items as $item) {
-                $pedido->items()->create($item);
+            $pedido = Pedido::firstOrCreate(
+                ['folio' => $p['folio'], 'user_id' => $user->id],
+                $p
+            );
+            if ($pedido->items()->count() === 0) {
+                foreach ($items as $item) {
+                    $pedido->items()->create($item);
+                }
             }
         }
     }

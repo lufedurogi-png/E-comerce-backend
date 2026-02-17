@@ -109,8 +109,11 @@ return [
             'charset' => env('DB_CHARSET', 'utf8'),
             'prefix' => '',
             'prefix_indexes' => true,
-            'encrypt' => env('DB_ENCRYPT', 'yes'),
-            'trust_server_certificate' => env('DB_TRUST_SERVER_CERTIFICATE', 'true'),
+            // ODBC Driver 17 suele aceptar solo 'yes' o 'no'. 'optional' puede dar "Invalid value for Encrypt".
+            'encrypt' => in_array(strtolower(env('DB_ENCRYPT', 'no')), ['1', 'true', 'yes'], true) ? 'yes' : 'no',
+            'trust_server_certificate' => in_array(strtolower(env('DB_TRUST_SERVER_CERTIFICATE', 'true')), ['1', 'true', 'yes'], true),
+            'pooling' => false,
+            'multiple_active_result_sets' => false,
         ],
 
     ],

@@ -4,9 +4,9 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
-class ProductoCva extends Model
+class ProductoManual extends Model
 {
-    protected $table = 'productos_cva';
+    protected $table = 'productos_manuales';
 
     protected $fillable = [
         'clave',
@@ -14,7 +14,6 @@ class ProductoCva extends Model
         'descripcion',
         'principal',
         'grupo',
-        'subgrupo',
         'marca',
         'garantia',
         'clase',
@@ -27,19 +26,24 @@ class ProductoCva extends Model
         'ficha_tecnica',
         'ficha_comercial',
         'destacado',
-        'raw_data',
         'especificaciones_tecnicas',
         'dimensiones',
-        'synced_at',
+        'informacion_general',
+        'anulado',
     ];
 
     protected $casts = [
         'precio' => 'decimal:2',
         'imagenes' => 'array',
-        'raw_data' => 'array',
         'especificaciones_tecnicas' => 'array',
         'dimensiones' => 'array',
+        'informacion_general' => 'array',
         'destacado' => 'boolean',
-        'synced_at' => 'datetime',
+        'anulado' => 'boolean',
     ];
+
+    public static function generarClave(): string
+    {
+        return 'MANUAL-'.strtoupper(uniqid()).'-'.mt_rand(100, 999);
+    }
 }

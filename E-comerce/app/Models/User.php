@@ -86,4 +86,9 @@ class User extends Authenticatable
     {
         return $this->hasMany(TarjetaGuardada::class, 'user_id');
     }
+
+    public function cotizaciones()
+    {
+        return $this->hasMany(Cotizacion::class, 'user_id');
+    }
 }

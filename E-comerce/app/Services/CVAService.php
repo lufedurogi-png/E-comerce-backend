@@ -223,6 +223,8 @@ class CVAService
             $page++;
         } while ($page <= $totalPages);
 
+        \Illuminate\Support\Facades\Cache::forget('productos_grupos_distinct');
+
         return ['synced' => $totalSynced, 'pages' => $page - 1];
     }
 
@@ -251,6 +253,11 @@ class CVAService
             $precio = $precio * (1 + $this->porcentaje / 100);
         }
 
+        // Mantener especificaciones técnicas y dimensiones existentes si ya las tiene
+        $productoExistente = ProductoCva::where('clave', $clave)->first();
+        $especificaciones = $productoExistente?->especificaciones_tecnicas ?? null;
+        $dimensiones = $productoExistente?->dimensiones ?? null;
+
         ProductoCva::updateOrCreate(
             ['clave' => $clave],
             [
@@ -272,6 +279,8 @@ class CVAService
                 'ficha_comercial' => $art['ficha_comercial'] ?? null,
                 'destacado' => false,
                 'raw_data' => $art,
+                'especificaciones_tecnicas' => $especificaciones,
+                'dimensiones' => $dimensiones,
                 'synced_at' => now(),
             ]
         );
@@ -305,5 +314,147 @@ class CVAService
         $data = $response->json();
 
         return $data['marcas'] ?? [];
+    }
+
+    /**
+     * Obtiene las especificaciones técnicas de un producto desde CVA.
+     * Endpoint: /catalogo_clientes/informacion_tecnica?clave=XXX
+     *
+     * @return array{especificaciones: array<array{nombre: string, valor: string}>}|null
+     */
+    public function fetchInformacionTecnica(string $clave): ?array
+    {
+        $token = $this->getToken();
+        if (! $token) {
+            return null;
+        }
+
+        $response = Http::acceptJson()
+            ->withToken($token)
+            ->get($this->baseUrl.'/catalogo_clientes/informacion_tecnica', ['clave' => $clave]);
+
+        if ($response->status() === 403) {
+            $this->forgetToken();
+
+            return null;
+        }
+
+        if (! $response->successful()) {
+            Log::warning('CVA informacion_tecnica failed', ['clave' => $clave, 'status' => $response->status()]);
+
+            return null;
+        }
+
+        $data = $response->json();
+        if (! is_array($data)) {
+            return null;
+        }
+
+        $especificaciones = [];
+
+        // Caso 1: CVA devuelve array "especificaciones" con objetos { nombre, valor } o variantes (name/value, campo/valor, etc.)
+        if (isset($data['especificaciones']) && is_array($data['especificaciones'])) {
+            foreach ($data['especificaciones'] as $item) {
+                if (! is_array($item)) {
+                    continue;
+                }
+                $nombre = $item['nombre'] ?? $item['name'] ?? $item['campo'] ?? $item['atributo'] ?? $item['label'] ?? '';
+                $valor = $item['valor'] ?? $item['value'] ?? $item['valor_str'] ?? '';
+                if ($nombre !== '' || $valor !== '') {
+                    $especificaciones[] = ['nombre' => (string) $nombre, 'valor' => (string) $valor];
+                }
+            }
+        }
+
+        // Caso 2: CVA devuelve objeto plano con claves como "Voltaje", "Amperaje", "Potencia", etc. (sin clave "especificaciones")
+        if (empty($especificaciones)) {
+            foreach ($data as $key => $value) {
+                if ($key === 'especificaciones' || $key === 'clave' || $key === 'codigo') {
+                    continue;
+                }
+                if (is_scalar($value) || $value === null) {
+                    $especificaciones[] = ['nombre' => (string) $key, 'valor' => (string) $value];
+                }
+            }
+        }
+
+        if ($especificaciones !== []) {
+            return ['especificaciones' => $especificaciones];
+        }
+
+        return null;
+    }
+
+    /**
+     * Obtiene las dimensiones de un producto desde CVA.
+     * Endpoints probados: catalogo_clientes/dimensiones, catalogo_clientes/dimensiones_producto
+     *
+     * @return array{nombre: string, valor: string}[]|null
+     */
+    public function fetchDimensiones(string $clave): ?array
+    {
+        $token = $this->getToken();
+        if (! $token) {
+            return null;
+        }
+
+        $endpoints = ['/catalogo_clientes/dimensiones', '/catalogo_clientes/dimensiones_producto'];
+        foreach ($endpoints as $path) {
+            $response = Http::acceptJson()
+                ->withToken($token)
+                ->get($this->baseUrl.$path, ['clave' => $clave]);
+
+            if ($response->status() === 403) {
+                $this->forgetToken();
+
+                return null;
+            }
+
+            if (! $response->successful()) {
+                continue;
+            }
+
+            $data = $response->json();
+            if (! is_array($data)) {
+                continue;
+            }
+
+            $filas = [];
+
+            // Array de { nombre, valor } o { name, value }, etc.
+            if (isset($data['dimensiones']) && is_array($data['dimensiones'])) {
+                foreach ($data['dimensiones'] as $item) {
+                    if (! is_array($item)) {
+                        continue;
+                    }
+                    $nombre = $item['nombre'] ?? $item['name'] ?? $item['campo'] ?? $item['atributo'] ?? $item['label'] ?? '';
+                    $valor = $item['valor'] ?? $item['value'] ?? '';
+                    if ($nombre !== '' || $valor !== '') {
+                        $filas[] = ['nombre' => (string) $nombre, 'valor' => (string) $valor];
+                    }
+                }
+            }
+
+            // Objeto plano: Alto, Ancho, Largo, Peso, etc.
+            if (empty($filas)) {
+                $omitir = ['clave', 'codigo', 'id', 'dimensiones'];
+                foreach ($data as $key => $value) {
+                    if (in_array(strtolower($key), array_map('strtolower', $omitir), true)) {
+                        continue;
+                    }
+                    if (is_scalar($value) || $value === null) {
+                        $filas[] = ['nombre' => (string) $key, 'valor' => (string) $value];
+                    }
+                }
+            }
+
+            if ($filas !== []) {
+                return $filas;
+            }
+        }
+
+        Log::debug('CVA dimensiones: no data for clave', ['clave' => $clave]);
+
+        return null;
     }
 }

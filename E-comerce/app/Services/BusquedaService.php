@@ -7,6 +7,7 @@ use App\Models\BusquedaProductoMostrado;
 use App\Models\BusquedaSeleccion;
 use App\Models\CorreccionAprendida;
 use App\Models\ProductoCva;
+use App\Models\ProductoManual;
 use App\Models\RelevanciaProductoTermino;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -63,7 +64,7 @@ class BusquedaService
             ]);
         }
 
-        $formateados = $productos->map(fn ($p) => $this->formatearProducto($p))->values()->all();
+        $formateados = $productos->map(fn ($p) => $p instanceof ProductoManual ? $this->formatearProductoManual($p) : $this->formatearProducto($p))->values()->all();
 
         return [
             'busqueda_id' => $busqueda->id,
@@ -144,6 +145,19 @@ class BusquedaService
                 ->values()
                 ->all();
 
+            $gruposManual = ProductoManual::query()
+                ->select('grupo')
+                ->distinct()
+                ->where('anulado', false)
+                ->whereNotNull('grupo')
+                ->where('grupo', '!=', '')
+                ->pluck('grupo')
+                ->map(fn ($g) => $this->normalizarParaComparar((string) $g))
+                ->filter(fn ($g) => $g !== '')
+                ->unique()
+                ->values()
+                ->all();
+
             $subgrupos = ProductoCva::query()
                 ->select('subgrupo')
                 ->distinct()
@@ -168,7 +182,20 @@ class BusquedaService
                 ->values()
                 ->all();
 
-            return array_values(array_unique(array_merge($grupos, $subgrupos, $marcas)));
+            $marcasManual = ProductoManual::query()
+                ->select('marca')
+                ->distinct()
+                ->where('anulado', false)
+                ->whereNotNull('marca')
+                ->where('marca', '!=', '')
+                ->pluck('marca')
+                ->map(fn ($m) => $this->normalizarParaComparar((string) $m))
+                ->filter(fn ($m) => $m !== '')
+                ->unique()
+                ->values()
+                ->all();
+
+            return array_values(array_unique(array_merge($grupos, $gruposManual, $subgrupos, $marcas, $marcasManual)));
         });
     }
 
@@ -246,38 +273,52 @@ class BusquedaService
             return collect();
         }
 
-        $query = ProductoCva::query();
+        $limite = (int) config('busqueda.limite_resultados', 50);
+        $productos = collect();
+
+        // Buscar en ProductoCva
+        $queryCva = ProductoCva::query();
         foreach ($palabras as $palabra) {
-            $like = '%' . $palabra . '%';
-            $query->where(function ($q) use ($like) {
+            $like = '%'.$palabra.'%';
+            $queryCva->where(function ($q) use ($like) {
                 $q->whereRaw('LOWER(descripcion) LIKE ?', [$like])
                     ->orWhereRaw('LOWER(grupo) LIKE ?', [$like])
                     ->orWhereRaw('LOWER(subgrupo) LIKE ?', [$like])
                     ->orWhereRaw('LOWER(marca) LIKE ?', [$like]);
             });
         }
+        $cva = $queryCva->limit($limite)->get();
+        $productos = $productos->merge($cva->map(fn ($p) => (object) ['tipo' => 'cva', 'model' => $p]));
 
-        $limite = (int) config('busqueda.limite_resultados', 50);
-        $ids = $query->select('id')->limit($limite * 2)->pluck('id'); // de sobra por si ordenamos por relevancia
-
-        if ($ids->isEmpty()) {
-            return collect();
+        // Buscar en ProductoManual (no anulados)
+        $queryManual = ProductoManual::query()->where('anulado', false);
+        foreach ($palabras as $palabra) {
+            $like = '%'.$palabra.'%';
+            $queryManual->where(function ($q) use ($like) {
+                $q->whereRaw('LOWER(descripcion) LIKE ?', [$like])
+                    ->orWhereRaw('LOWER(grupo) LIKE ?', [$like])
+                    ->orWhereRaw('LOWER(marca) LIKE ?', [$like]);
+            });
         }
+        $manual = $queryManual->limit($limite)->get();
+        $productos = $productos->merge($manual->map(fn ($p) => (object) ['tipo' => 'manual', 'model' => $p]));
 
+        $claves = $productos->pluck('model.clave')->filter()->all();
         $relevancias = RelevanciaProductoTermino::where('termino_normalizado', $termino)
-            ->whereIn('producto_clave', function ($q) use ($ids) {
-                $q->select('clave')->from('productos_cva')->whereIn('id', $ids);
-            })
+            ->whereIn('producto_clave', $claves)
             ->get()
             ->keyBy('producto_clave');
 
-        $productos = ProductoCva::whereIn('id', $ids)->get();
-        $productos = $productos->sortByDesc(function ($p) use ($relevancias) {
-            $r = $relevancias->get($p->clave);
-            return $r ? $r->veces_seleccionado : 0;
-        })->values()->take($limite);
+        $productos = $productos
+            ->sortByDesc(function ($item) use ($relevancias) {
+                $r = $relevancias->get($item->model->clave ?? '');
 
-        return $productos;
+                return $r ? $r->veces_seleccionado : 0;
+            })
+            ->values()
+            ->take($limite);
+
+        return $productos->map(fn ($item) => $item->model);
     }
 
     private function aprenderCorreccionesDesdeBusqueda(Busqueda $busqueda): void
@@ -318,6 +359,25 @@ class BusquedaService
             'imagenes' => $p->imagenes ?? [],
             'disponible' => $p->disponible,
             'disponible_cd' => $p->disponible_cd,
+            'garantia' => $p->garantia,
+        ];
+    }
+
+    private function formatearProductoManual(ProductoManual $p): array
+    {
+        return [
+            'id' => $p->id,
+            'clave' => $p->clave,
+            'codigo_fabricante' => $p->codigo_fabricante,
+            'descripcion' => $p->descripcion,
+            'grupo' => $p->grupo,
+            'marca' => $p->marca,
+            'precio' => (float) $p->precio,
+            'moneda' => $p->moneda ?? 'MXN',
+            'imagen' => $p->imagen,
+            'imagenes' => $p->imagenes ?? [],
+            'disponible' => $p->disponible ?? 0,
+            'disponible_cd' => $p->disponible_cd ?? 0,
             'garantia' => $p->garantia,
         ];
     }

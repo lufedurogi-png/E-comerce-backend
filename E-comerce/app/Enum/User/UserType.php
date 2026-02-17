@@ -16,6 +16,14 @@ enum UserType : int
             UserType::SELLER => 'Vendedor',
         };
     }
+    public static function toArray(): array
+    {
+        return array_map(fn($case) => [
+            'id' => $case->value,
+            'label' => $case->label(),
+        ], self::cases());
+    }
+
     public function getAbilities(): array
     {
         return match($this) {

@@ -1,20 +1,34 @@
 <?php
 
+use App\Http\Controllers\Api\V1\Admin\AdminAuthController;
+use App\Http\Controllers\Api\V1\Admin\AdminStatsController;
+use App\Http\Controllers\Api\V1\Admin\ManagerUserController;
+use App\Http\Controllers\Api\V1\Admin\ProductoManualAdminController;
+use App\Http\Controllers\Api\V1\Admin\PedidoAdminController;
+use App\Http\Controllers\Api\V1\Admin\PublicidadAdminController;
 use App\Http\Controllers\Api\V1\Auth\AuthController as ApiAuthController;
 use App\Http\Controllers\Api\V1\BusquedaController;
 use App\Http\Controllers\Api\V1\CarritoController;
+use App\Http\Controllers\Api\V1\CotizacionController;
 use App\Http\Controllers\Api\V1\Client\ClientController;
-use App\Http\Controllers\Api\V1\FavoritoController;
 use App\Http\Controllers\Api\V1\DatoFacturacionController;
 use App\Http\Controllers\Api\V1\DireccionEnvioController;
+use App\Http\Controllers\Api\V1\FavoritoController;
 use App\Http\Controllers\Api\V1\PedidoController;
 use App\Http\Controllers\Api\V1\ProductoController;
+use App\Http\Controllers\Api\V1\PublicidadController;
 use App\Http\Controllers\Api\V1\PruebaPedidoController;
 use App\Http\Controllers\Api\V1\TarjetaGuardadaController;
 use App\Http\Controllers\Spa\Auth\AuthController as SpaAuthController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
+    // Admin auth (público - solo crea/admin login)
+    Route::prefix('admin/auth')->group(function () {
+        Route::post('/register', [AdminAuthController::class, 'register'])->name('admin.auth.register');
+        Route::post('/token', [AdminAuthController::class, 'token'])->name('admin.auth.token');
+    });
+
     //public routes here ------------------------
         //token
         Route::post('/auth/register', [ApiAuthController::class, 'register'])->name('auth.register')->middleware('guest');
@@ -43,6 +57,9 @@ Route::prefix('v1')->group(function () {
         // Búsqueda + registro de búsqueda/productos mostrados
         Route::get('/busqueda', [BusquedaController::class, 'index'])->name('busqueda.index');
         Route::post('/busqueda/seleccion', [BusquedaController::class, 'registrarSeleccion'])->name('busqueda.seleccion');
+
+        // Publicidad (carrusel) - público
+        Route::get('/publicidad', [PublicidadController::class, 'index'])->name('publicidad.index');
     //-------------------------------------------------------------
 
     //protected routes here
@@ -98,10 +115,56 @@ Route::prefix('v1')->group(function () {
             Route::put('/datos-facturacion/{id}', [DatoFacturacionController::class, 'update'])->name('datos-facturacion.update');
             Route::delete('/datos-facturacion/{id}', [DatoFacturacionController::class, 'destroy'])->name('datos-facturacion.destroy');
 
+            Route::get('/cotizaciones', [CotizacionController::class, 'index'])->name('cotizaciones.index');
+            Route::post('/cotizaciones', [CotizacionController::class, 'store'])->name('cotizaciones.store');
+            Route::get('/cotizaciones/papelera', [CotizacionController::class, 'papelera'])->name('cotizaciones.papelera');
+            Route::get('/cotizaciones/{id}', [CotizacionController::class, 'show'])->name('cotizaciones.show');
+            Route::put('/cotizaciones/{id}', [CotizacionController::class, 'update'])->name('cotizaciones.update');
+            Route::delete('/cotizaciones/{id}', [CotizacionController::class, 'destroy'])->name('cotizaciones.destroy');
+            Route::post('/cotizaciones/{id}/restore', [CotizacionController::class, 'restore'])->name('cotizaciones.restore');
+
             Route::get('/tarjetas-guardadas', [TarjetaGuardadaController::class, 'index'])->name('tarjetas-guardadas.index');
             Route::post('/tarjetas-guardadas', [TarjetaGuardadaController::class, 'store'])->name('tarjetas-guardadas.store');
             Route::put('/tarjetas-guardadas/{id}', [TarjetaGuardadaController::class, 'update'])->name('tarjetas-guardadas.update');
             Route::delete('/tarjetas-guardadas/{id}', [TarjetaGuardadaController::class, 'destroy'])->name('tarjetas-guardadas.destroy');
+        });
+
+        // Admin routes (solo usuarios con rol admin)
+        Route::middleware('role:admin')->prefix('admin')->name('admin.')->group(function () {
+            Route::get('/stats/categorias-mas-vistas', [AdminStatsController::class, 'categoriasMasVistas'])->name('stats.categorias');
+            Route::get('/stats/clientes-por-mes', [AdminStatsController::class, 'clientesPorMes'])->name('stats.clientes');
+            Route::get('/stats/actividad-usuarios', [AdminStatsController::class, 'actividadUsuarios'])->name('stats.actividad');
+            Route::get('/stats/actividad-eventos', [AdminStatsController::class, 'actividadEventos'])->name('stats.actividad.eventos');
+
+            Route::get('/tipos-usuario', [ManagerUserController::class, 'getTypesUser'])->name('tipos-usuario');
+            Route::get('/permisos', [ManagerUserController::class, 'getPermissions'])->name('permisos');
+
+            Route::get('/usuarios', [ManagerUserController::class, 'index'])->name('usuarios.index');
+            Route::post('/usuarios', [ManagerUserController::class, 'store'])->name('usuarios.store');
+            Route::put('/usuarios/{usuarioId}', [ManagerUserController::class, 'update'])->name('usuarios.update');
+            Route::delete('/usuarios/{usuarioId}', [ManagerUserController::class, 'destroy'])->name('usuarios.destroy');
+            Route::put('/usuarios/{usuarioId}/rol', [ManagerUserController::class, 'setRole'])->name('usuarios.rol');
+            Route::delete('/usuarios/{usuarioId}/rol', [ManagerUserController::class, 'removeRole'])->name('usuarios.rol.destroy');
+            Route::put('/usuarios/{usuarioId}/password', [ManagerUserController::class, 'resetPassword'])->name('usuarios.password');
+            Route::post('/usuarios/{usuarioId}/permisos', [ManagerUserController::class, 'grantPermission'])->name('usuarios.permisos.grant');
+            Route::post('/usuarios/{usuarioId}/permisos/revocar', [ManagerUserController::class, 'revokePermission'])->name('usuarios.permisos.revoke');
+
+            Route::get('/publicidad', [PublicidadAdminController::class, 'index'])->name('publicidad.admin.index');
+            Route::post('/publicidad', [PublicidadAdminController::class, 'store'])->name('publicidad.admin.store');
+            Route::delete('/publicidad/{id}', [PublicidadAdminController::class, 'destroy'])->name('publicidad.admin.destroy');
+
+            Route::get('/productos-manuales', [ProductoManualAdminController::class, 'index'])->name('productos-manuales.index');
+            Route::post('/productos-manuales', [ProductoManualAdminController::class, 'store'])->name('productos-manuales.store');
+            Route::get('/productos-manuales/grupos', [ProductoManualAdminController::class, 'gruposDistintos'])->name('productos-manuales.grupos');
+            Route::get('/productos-manuales/marcas', [ProductoManualAdminController::class, 'marcasDistintas'])->name('productos-manuales.marcas');
+            Route::get('/productos-manuales/{id}', [ProductoManualAdminController::class, 'show'])->name('productos-manuales.show');
+            Route::put('/productos-manuales/{id}', [ProductoManualAdminController::class, 'update'])->name('productos-manuales.update');
+            Route::delete('/productos-manuales/{id}', [ProductoManualAdminController::class, 'destroy'])->name('productos-manuales.destroy');
+            Route::post('/productos-manuales/{id}/anular', [ProductoManualAdminController::class, 'toggleAnulado'])->name('productos-manuales.toggle-anulado');
+
+            Route::get('/pedidos', [PedidoAdminController::class, 'index'])->name('pedidos.admin.index');
+            Route::get('/pedidos/{id}/pdf', [PedidoAdminController::class, 'downloadPdf'])->name('pedidos.admin.pdf');
+            Route::get('/pedidos/{id}', [PedidoAdminController::class, 'show'])->name('pedidos.admin.show');
         });
 
     });
