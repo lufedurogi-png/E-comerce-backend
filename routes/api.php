@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\V1\Admin\AdminAuthController;
+use App\Http\Controllers\Api\V1\Ventas\VentasAuthController;
 use App\Http\Controllers\Api\V1\Admin\AdminStatsController;
 use App\Http\Controllers\Api\V1\Admin\ManagerUserController;
 use App\Http\Controllers\Api\V1\Admin\ProductoManualAdminController;
@@ -29,6 +30,11 @@ Route::prefix('v1')->group(function () {
         Route::post('/token', [AdminAuthController::class, 'token'])->name('admin.auth.token');
     });
 
+    // Ventas auth (público - solo vendedores)
+    Route::prefix('ventas/auth')->group(function () {
+        Route::post('/token', [VentasAuthController::class, 'token'])->name('ventas.auth.token');
+    });
+
     //public routes here ------------------------
         //token
         Route::post('/auth/register', [ApiAuthController::class, 'register'])->name('auth.register')->middleware('guest');
@@ -53,6 +59,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/catalogos/grupos', [ProductoController::class, 'grupos'])->name('catalogos.grupos');
         Route::get('/catalogos/subgrupos', [ProductoController::class, 'subgrupos'])->name('catalogos.subgrupos');
         Route::get('/catalogos/marcas', [ProductoController::class, 'marcas'])->name('catalogos.marcas');
+        Route::get('/catalogos/filtros-dinamicos', [ProductoController::class, 'filtrosDinamicos'])->name('catalogos.filtrosDinamicos');
 
         // Búsqueda + registro de búsqueda/productos mostrados
         Route::get('/busqueda', [BusquedaController::class, 'index'])->name('busqueda.index');

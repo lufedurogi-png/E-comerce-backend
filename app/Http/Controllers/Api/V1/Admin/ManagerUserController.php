@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1\Admin;
 
 use App\Data\User\AdminCreateUserData;
+use App\Enum\User\UserType;
 use App\Data\User\AdminPasswordConfirmData;
 use App\Data\User\GrantPermissionData;
 use App\Data\User\AdminResetPasswordData;
@@ -43,8 +44,16 @@ class ManagerUserController extends Controller
         return response()->json($result, Response::HTTP_OK);
     }
 
-    public function store(AdminCreateUserData $data): JsonResponse
+    public function store(Request $request): JsonResponse
     {
+        $typeValue = (int) $request->input('type', 2);
+        $type = UserType::tryFrom($typeValue) ?? UserType::CUSTOMER;
+
+        $data = AdminCreateUserData::from([
+            ...$request->all(),
+            'type' => $type,
+        ]);
+
         $result = $this->managerUsersService->createUser($data);
         return response()->json($result, $result->success ? Response::HTTP_CREATED : Response::HTTP_BAD_REQUEST);
     }

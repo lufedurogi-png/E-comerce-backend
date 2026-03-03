@@ -104,6 +104,34 @@ class TokenAuthService
         );
     }
 
+    public function sellerGenerateToken(AccessUserData $data): AuthResponseData
+    {
+        $user = $this->userService->findByEmail($data->email);
+
+        if (! $user) {
+            return $this->failedAuthResponse();
+        }
+        if (! $this->validateCredentials($user, $data->password)) {
+            return $this->failedAuthResponse();
+        }
+        if (! $user->hasRole('seller')) {
+            return new AuthResponseData(
+                success: false,
+                message: 'Solo los vendedores pueden acceder al panel de ventas.'
+            );
+        }
+
+        $token = $this->createTokenForUser($user);
+        $this->logLogin($user);
+
+        return new AuthResponseData(
+            success: true,
+            user: $this->userService->getUser($user),
+            token: $token,
+            auth_type: 'Bearer',
+        );
+    }
+
     public function revokeTokens():AuthResponseData
     {
         $user = Auth::user();

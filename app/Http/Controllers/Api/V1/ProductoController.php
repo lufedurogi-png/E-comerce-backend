@@ -72,6 +72,24 @@ class ProductoController extends Controller
         $currentPage = max(1, (int) $request->input('page', 1));
         $orden = $request->input('orden', 'reciente');
 
+        $filtros = $request->input('filtros', []);
+        if (is_array($filtros) && ! empty($filtros)) {
+            $clavesFiltro = $this->getClavesQueCoincidenConFiltros($request, $filtros);
+            if (empty($clavesFiltro)) {
+                return [
+                    'success' => true,
+                    'data' => [
+                        'productos' => [],
+                        'total' => 0,
+                        'per_page' => $perPage,
+                        'current_page' => $currentPage,
+                        'last_page' => 1,
+                    ],
+                ];
+            }
+            $request->merge(['claves' => implode(',', $clavesFiltro)]);
+        }
+
         $cvaQuery = ProductoCva::query()->select(self::INDEX_SELECT);
         $manualQuery = ProductoManual::query()->select(self::MANUAL_INDEX_SELECT)->where('anulado', false);
 
@@ -518,6 +536,309 @@ class ProductoController extends Controller
             ->all();
 
         return response()->json(['success' => true, 'data' => $list]);
+    }
+
+    /**
+     * Filtros dinámicos para una subcategoría: extrae de Información general (raw_data/informacion_general)
+     * y Especificaciones (especificaciones_tecnicas, dimensiones). Respeta marca, precio y filtros ya seleccionados (cascada).
+     */
+    public function filtrosDinamicos(Request $request): JsonResponse
+    {
+        if (! $this->catalogAvailable()) {
+            return $this->catalogUnavailableResponse();
+        }
+
+        $grupo = $request->input('grupo', '');
+        $categoriaPrincipal = $request->input('categoria_principal', '');
+        if ($grupo === '' && $categoriaPrincipal === '') {
+            return response()->json(['success' => true, 'data' => []]);
+        }
+
+        $cacheKey = 'filtros_dinamicos_'.md5(serialize($request->only(['grupo', 'categoria_principal', 'marca', 'precio_min', 'precio_max', 'filtros'])));
+        $data = Cache::remember($cacheKey, self::CACHE_TTL, function () use ($request) {
+            return $this->computeFiltrosDinamicos($request);
+        });
+
+        return response()->json(['success' => true, 'data' => $data]);
+    }
+
+    private const CAMPOS_EXCLUIDOS_FILTROS = ['descripcion', 'id', 'id_producto', 'imagen', 'imagenes', 'brand_image'];
+
+    private function computeFiltrosDinamicos(Request $request): array
+    {
+        $grupo = $request->input('grupo', '');
+        $categoriaPrincipal = $request->input('categoria_principal', '');
+        $marca = $request->input('marca', '');
+        $precioMin = $request->filled('precio_min') ? (float) $request->input('precio_min') : null;
+        $precioMax = $request->filled('precio_max') ? (float) $request->input('precio_max') : null;
+        $filtrosYaSeleccionados = $request->input('filtros', []);
+        $filtrosYaSeleccionados = is_array($filtrosYaSeleccionados) ? $filtrosYaSeleccionados : [];
+
+        $cvaQuery = ProductoCva::query()->select('id', 'clave', 'raw_data', 'especificaciones_tecnicas', 'dimensiones', 'marca', 'garantia', 'clase', 'codigo_fabricante');
+        $manualQuery = ProductoManual::query()
+            ->select('id', 'clave', 'especificaciones_tecnicas', 'dimensiones', 'informacion_general', 'marca', 'garantia', 'clase', 'codigo_fabricante')
+            ->where('anulado', false);
+
+        if ($grupo !== '') {
+            $cvaQuery->where('grupo', $grupo);
+            $manualQuery->where('grupo', $grupo);
+        } else {
+            $gruposEnDb = $this->getGruposEnDb();
+            $grupos = $this->categorias->gruposPorCategoria($categoriaPrincipal, $gruposEnDb);
+            if (empty($grupos)) {
+                return [];
+            }
+            $cvaQuery->whereIn('grupo', $grupos);
+            $manualQuery->where(function ($q) use ($grupos, $categoriaPrincipal) {
+                $q->whereIn('grupo', $grupos)
+                    ->orWhere('principal', $categoriaPrincipal);
+            });
+        }
+
+        if ($marca !== '') {
+            $cvaQuery->where('marca', $marca);
+            $manualQuery->where('marca', $marca);
+        }
+        if ($precioMin !== null) {
+            $cvaQuery->where('precio', '>=', $precioMin);
+            $manualQuery->where('precio', '>=', $precioMin);
+        }
+        if ($precioMax !== null) {
+            $cvaQuery->where('precio', '<=', $precioMax);
+            $manualQuery->where('precio', '<=', $precioMax);
+        }
+
+        $cva = $cvaQuery->limit(400)->get();
+        $manual = $manualQuery->limit(150)->get();
+        $productos = $cva->concat($manual)->values();
+
+        if (! empty($filtrosYaSeleccionados)) {
+            $productos = $productos->filter(fn ($p) => $this->productoCoincideConFiltros($p, $filtrosYaSeleccionados))->values();
+        }
+
+        $agregados = [];
+        $etiquetas = [];
+        foreach ($productos as $p) {
+            $this->agregarFiltrosDeProducto($p, $agregados, $etiquetas);
+        }
+
+        $resultado = [];
+        foreach ($agregados as $canon => $vals) {
+            $vals = array_values(array_unique(array_filter(array_map('trim', $vals))));
+            sort($vals);
+            if (count($vals) > 0) {
+                $label = $etiquetas[$canon] ?? $canon;
+                $resultado[$label] = $vals;
+            }
+        }
+        ksort($resultado);
+
+        return $resultado;
+    }
+
+    /** Obtiene las claves de productos que coinciden con todos los filtros dinámicos, marca y precio. */
+    private function getClavesQueCoincidenConFiltros(Request $request, array $filtros): array
+    {
+        $grupo = $request->input('grupo', '');
+        $categoriaPrincipal = $request->input('categoria_principal', '');
+        $marca = $request->input('marca', '');
+        $precioMin = $request->filled('precio_min') ? (float) $request->input('precio_min') : null;
+        $precioMax = $request->filled('precio_max') ? (float) $request->input('precio_max') : null;
+
+        $cvaQuery = ProductoCva::query()->select('id', 'clave', 'raw_data', 'especificaciones_tecnicas', 'dimensiones', 'marca', 'garantia', 'clase', 'codigo_fabricante');
+        $manualQuery = ProductoManual::query()
+            ->select('id', 'clave', 'especificaciones_tecnicas', 'dimensiones', 'informacion_general', 'marca', 'garantia', 'clase', 'codigo_fabricante')
+            ->where('anulado', false);
+
+        if ($grupo !== '') {
+            $cvaQuery->where('grupo', $grupo);
+            $manualQuery->where('grupo', $grupo);
+        } else {
+            $gruposEnDb = $this->getGruposEnDb();
+            $grupos = $this->categorias->gruposPorCategoria($categoriaPrincipal, $gruposEnDb);
+            if (empty($grupos)) {
+                return [];
+            }
+            $cvaQuery->whereIn('grupo', $grupos);
+            $manualQuery->where(function ($q) use ($grupos, $categoriaPrincipal) {
+                $q->whereIn('grupo', $grupos)
+                    ->orWhere('principal', $categoriaPrincipal);
+            });
+        }
+
+        if ($marca !== '') {
+            $cvaQuery->where('marca', $marca);
+            $manualQuery->where('marca', $marca);
+        }
+        if ($precioMin !== null) {
+            $cvaQuery->where('precio', '>=', $precioMin);
+            $manualQuery->where('precio', '>=', $precioMin);
+        }
+        if ($precioMax !== null) {
+            $cvaQuery->where('precio', '<=', $precioMax);
+            $manualQuery->where('precio', '<=', $precioMax);
+        }
+
+        $cacheKey = 'claves_filtros_'.md5(serialize([$grupo, $categoriaPrincipal, $marca, $precioMin, $precioMax, $filtros]));
+        return Cache::remember($cacheKey, 300, function () use ($cvaQuery, $manualQuery, $filtros) {
+            $cva = $cvaQuery->limit(1500)->get();
+            $manual = $manualQuery->limit(300)->get();
+            $resultado = [];
+            foreach ($cva->concat($manual) as $p) {
+                if ($this->productoCoincideConFiltros($p, $filtros)) {
+                    $resultado[] = $p->clave;
+                }
+            }
+            return array_unique($resultado);
+        });
+    }
+
+    private function productoCoincideConFiltros(ProductoCva|ProductoManual $p, array $filtros): bool
+    {
+        $valores = $this->extraerValoresParaFiltro($p);
+        foreach ($filtros as $nombre => $valorBuscado) {
+            $valorBuscado = $this->normalizarValorFiltro((string) $valorBuscado);
+            if ($valorBuscado === '') {
+                continue;
+            }
+            $vals = $this->findValoresPorNombre($valores, $nombre);
+            $coincide = false;
+            foreach ($vals as $v) {
+                if ($this->normalizarValorFiltro((string) $v) === $valorBuscado) {
+                    $coincide = true;
+                    break;
+                }
+            }
+            if (! $coincide) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private function normalizarValorFiltro(string $v): string
+    {
+        $v = trim(preg_replace('/\s+/', ' ', $v));
+        $v = mb_strtolower($v, 'UTF-8');
+        $v = str_replace(['á', 'é', 'í', 'ó', 'ú', 'ñ', 'ü'], ['a', 'e', 'i', 'o', 'u', 'n', 'u'], $v);
+
+        return $v;
+    }
+
+    private function findValoresPorNombre(array $valores, string $nombre): array
+    {
+        $nombreCanon = $this->claveCanonicaFiltro($nombre);
+        foreach ($valores as $k => $v) {
+            if ($this->claveCanonicaFiltro($k) === $nombreCanon) {
+                return $v;
+            }
+        }
+        return [];
+    }
+
+    /** @return array<string, array<string>> Nombre => [valores] */
+    private function extraerValoresParaFiltro(ProductoCva|ProductoManual $p): array
+    {
+        $out = [];
+        $agregar = function (string $key, $valor) use (&$out) {
+            $k = trim($key);
+            if ($k === '') return;
+            $v = is_scalar($valor) ? trim((string) $valor) : null;
+            if ($v !== null && $v !== '') {
+                $out[$k] = $out[$k] ?? [];
+                $out[$k][] = $v;
+            }
+        };
+
+        if ($p->clave) $agregar('Clave', $p->clave);
+        if ($p->codigo_fabricante) $agregar('Código de fabricante', $p->codigo_fabricante);
+        if ($p->marca) $agregar('Marca', $p->marca);
+        if ($p->garantia) $agregar('Garantía', $p->garantia);
+        if ($p->clase) $agregar('Clase', $p->clase);
+
+        if ($p instanceof ProductoManual) {
+            foreach ($p->informacion_general ?? [] as $item) {
+                if (is_array($item) && ! empty(trim($item['nombre'] ?? ''))) {
+                    $agregar($item['nombre'], $item['valor'] ?? '');
+                }
+            }
+        }
+        foreach ($p->raw_data ?? [] as $k => $v) {
+            if (is_scalar($v)) $agregar($k, $v);
+        }
+        foreach ($p->especificaciones_tecnicas ?? [] as $item) {
+            if (is_array($item) && ! empty(trim($item['nombre'] ?? ''))) {
+                $agregar($item['nombre'], $item['valor'] ?? '');
+            }
+        }
+        foreach ($p->dimensiones ?? [] as $item) {
+            if (is_array($item) && ! empty(trim($item['nombre'] ?? ''))) {
+                $agregar($item['nombre'], $item['valor'] ?? '');
+            }
+        }
+        return $out;
+    }
+
+    private function claveCanonicaFiltro(string $key): string
+    {
+        $k = preg_replace('/[\s_]+/', ' ', trim($key));
+        return mb_strtolower($k, 'UTF-8');
+    }
+
+    private function agregarFiltrosDeProducto(ProductoCva|ProductoManual $p, array &$agregados, array &$etiquetas): void
+    {
+        $excluidos = array_map('strtolower', self::CAMPOS_EXCLUIDOS_FILTROS);
+
+        $agregar = function (string $key, $valor) use (&$agregados, &$etiquetas, $excluidos) {
+            $k = trim($key);
+            if ($k === '' || in_array(strtolower($k), $excluidos)) {
+                return;
+            }
+            $canon = $this->claveCanonicaFiltro($k);
+            if (in_array($canon, array_map('strtolower', self::CAMPOS_EXCLUIDOS_FILTROS))) {
+                return;
+            }
+            $v = is_scalar($valor) ? trim((string) $valor) : null;
+            if ($v !== null && $v !== '') {
+                $agregados[$canon] = $agregados[$canon] ?? [];
+                $agregados[$canon][] = $v;
+                if (! isset($etiquetas[$canon]) || strlen($k) >= strlen($etiquetas[$canon])) {
+                    $etiquetas[$canon] = $k;
+                }
+            }
+        };
+
+        if ($p->clave) $agregar('Clave', $p->clave);
+        if ($p->codigo_fabricante) $agregar('Código de fabricante', $p->codigo_fabricante);
+        if ($p->marca) $agregar('Marca', $p->marca);
+        if ($p->garantia) $agregar('Garantía', $p->garantia);
+        if ($p->clase) $agregar('Clase', $p->clase);
+
+        if ($p instanceof ProductoManual) {
+            foreach ($p->informacion_general ?? [] as $item) {
+                if (is_array($item) && ! empty(trim($item['nombre'] ?? ''))) {
+                    $agregar($item['nombre'], $item['valor'] ?? '');
+                }
+            }
+        }
+
+        foreach ($p->raw_data ?? [] as $rawKey => $v) {
+            if (is_scalar($v) && ! in_array(strtolower(trim((string) $rawKey)), array_map('strtolower', self::CAMPOS_EXCLUIDOS_FILTROS))) {
+                $agregar((string) $rawKey, $v);
+            }
+        }
+
+        foreach ($p->especificaciones_tecnicas ?? [] as $item) {
+            if (is_array($item) && ! empty(trim($item['nombre'] ?? ''))) {
+                $agregar($item['nombre'], $item['valor'] ?? '');
+            }
+        }
+
+        foreach ($p->dimensiones ?? [] as $item) {
+            if (is_array($item) && ! empty(trim($item['nombre'] ?? ''))) {
+                $agregar($item['nombre'], $item['valor'] ?? '');
+            }
+        }
     }
 
     /**
