@@ -1,0 +1,8 @@
+# Dependencias
+node_modules
+
+# Build Next.js
+.next
+
+# Variables de entorno locales
+.env.local

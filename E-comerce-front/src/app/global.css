@@ -1,0 +1,21 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+    .font-playfair {
+        font-family: var(--font-playfair), serif;
+    }
+    
+    .font-vt323 {
+        font-family: var(--font-vt323), monospace;
+    }
+}
+
+@keyframes carrusel-right {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+}
+.animate-carrusel-right {
+    animation: carrusel-right 90s linear infinite;
+}
